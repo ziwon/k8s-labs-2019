@@ -1,0 +1,24 @@
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: traefik-dashboard
+  namespace: kube-system
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+    ingress.kubernetes.io/ssl-redirect: "true"
+    traefik.ingress.kubernetes.io/redirect-entry-point: "http"
+    certmanager.k8s.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  rules:
+  - host: dev.brainest.ml
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: traefik
+          servicePort: 80
+  tls:
+  - secretName: letsencrypt-prod-tls
+    hosts:
+    - dev.brainest.ml

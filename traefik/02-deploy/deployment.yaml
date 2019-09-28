@@ -1,0 +1,80 @@
+---
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  namespace: kube-system
+  name: traefik
+  labels:
+    app: traefik
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: traefik
+  template:
+    metadata:
+      labels:
+        app: traefik
+    spec:
+      serviceAccountName: traefik-ingress-controller
+      containers:
+      - name: traefik
+        image: traefik:v2.0
+        imagePullPolicy: IfNotPresent
+        args:
+        - --global.checknewversion=true
+        - --global.sendanonymoususage=false
+        - --api.insecure=true
+        - --accesslog
+        - --log.level=Debug
+        - --providers.file.filename=/config/dynamic_conf.toml
+        - --providers.file.watch=true
+        - --providers.kubernetesCRD
+        - --providers.kubernetesIngress=true
+        - --providers.kubernetesIngress.ingressEndpoint.publishedService=kube-system/traefik
+        - --serverstransport.insecureSkipVerify=true
+        - --entrypoints.http.address=:80
+        - --entrypoints.https.address=:443
+        - --entrypoints.traefik.address=:8080
+        #- --metrics=true
+        #- --metrics.prometheus=true
+        #- --metrics.prometheus.buckets=0.1,0.3,1.2,5.0
+        - --certificatesResolvers.default.acme.email=admin@brainest.ml
+        - --certificatesResolvers.default.acme.storage=acme.json
+        - --certificatesResolvers.default.acme.httpChallenge=true
+        - --certificatesResolvers.default.acme.httpChallenge.entryPoint=http
+        #- --tracing=true
+        #- --tracing.jaeger=true
+        #- --tracing.jaeger.samplingType='const'
+        #- --tracing.spanNameLimit=150
+        ports:
+        - name: http
+          containerPort: 80
+        - name: https
+          containerPort: 443
+        - name: admin
+          containerPort: 8080
+        readinessProbe:
+          failureThreshold: 1
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          tcpSocket:
+            port: 80
+          timeoutSeconds: 2
+        livenessProbe:
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          tcpSocket:
+            port: 80
+          timeoutSeconds: 2
+        volumeMounts:
+        - mountPath: /config
+          name: config
+      volumes:
+      - configMap:
+          defaultMode: 0777
+          name: traefik
+        name: config

@@ -1,0 +1,39 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: traefik
+  namespace: kube-system
+data:
+  dynamic_conf.toml: |
+    [http]
+      [http.routers]
+        [http.routers.router0]
+          rule = "HostRegexp(`{host:.+}`)"
+          entrypoint = ["http"]
+          service = "admin"
+          middlewares = ["adminAuth","redirect"]
+          priority = 1
+
+        [http.routers.router1]
+          rule = "HostRegexp(`{host:.+}`)"
+          entrypoint = ["https"]
+          service = "admin"
+          middlewares = ["adminAuth"]
+          priority = 1
+          [http.routers.router1.tls]
+
+        [http.middlewares]
+          [http.middlewares.redirect.redirectScheme]
+            scheme = "https"
+
+          [http.middlewares.adminAuth.basicAuth]
+            # echo $(htpasswd -nb user password) | sed -e s/\\$/\\$\\$/g
+            users = [
+              "admin:$$apr1$$oLh2Faj8$$/iDVbVbJiNH.r0IqkP0KC."
+            ]
+
+        [http.services]
+          [http.services.admin.loadBalancer]
+            [[http.services.admin.loadBalancer.servers]]
+            url = "http://traefik/"

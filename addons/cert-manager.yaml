@@ -1,0 +1,15 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: cert-manager
+  namespace: kube-system
+spec:
+  chart: cert-manager
+  version: 0.9.1
+  targetNamespace: cert-manager
+  repo: https://charts.jetstack.io
+  set:
+    ingressShim.defaultIssuerName: letsencrypt-prod
+    ingressShim.defaultIssuerKind: ClusterIssuer
+    rbac.create: "false"
+    extraArgs: "{--dns01-recursive-nameservers-only,--dns01-self-check-nameservers=8.8.8.8:53,1.1.1.1:53}"
