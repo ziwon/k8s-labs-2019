@@ -32,7 +32,7 @@ kubectl --kubeconfig="${KUBECONFIG}" apply -f "https://raw.githubusercontent.com
 kubectl --kubeconfig="${KUBECONFIG}" apply -f "addons/cert-manager.yaml"
 
 # Install cluster issuers
-# kubectl --kubeconfig="${KUBECONFIG}" apply -f "issuers/cluster-issuer-prod.yaml"
+kubectl --kubeconfig="${KUBECONFIG}" apply -f "issuers/cluster-issuer-prod.yaml"
 kubectl --kubeconfig="${KUBECONFIG}" apply -f "issuers/cluster-issuer-staging.yaml"
 
 # Install metrics

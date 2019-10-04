@@ -9,16 +9,16 @@ spec:
     app: traefik
     #externalTrafficPolicy: Local
   ports:
-  #- protocol: TCP
-    #port: 80
-    #targetPort: 80
-    #name: http
-  - protocol: TCP
-    port: 443
-    targetPort: 8080
-    name: https
   - protocol: TCP
     port: 80
+    targetPort: 80
+    name: http
+  - protocol: TCP
+    port: 443
+    targetPort: 443
+    name: https
+  - protocol: TCP
+    port: 8080
     targetPort: 8080
     name: admin
   type: LoadBalancer

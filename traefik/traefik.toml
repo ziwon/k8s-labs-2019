@@ -1,0 +1,43 @@
+[entryPoints]
+    [entryPoints.http]
+        address = ":80"
+
+    [entryPoints.https]
+        address = ":443"
+        
+    [entryPoints.traefik]
+        address = ":8080"
+        
+    [http]
+        [http.routers]
+            [http.routers.api]
+                rule = "HostRegexp(`{host:.+}`)"
+                entrypoints = ["https"]
+                service = "api@internal"
+                middlewares = ["adminAuth"]
+                [http.routers.api.tls]
+                
+            [http.middlewares]
+                [http.middlewares.redirect.redirectScheme]
+                    scheme = "https"
+                    
+            [http.middlewares.adminAuth.basicAuth]
+                # echo $(htpasswd -nb user password) | sed -e s/\\$/\\$\\$/g
+                users = [
+                    "admin:$$apr1$$oLh2Faj8$$/iDVbVbJiNH.r0IqkP0KC."
+                ]
+                
+    [[tls.certificates]]
+        certFile = "/ssl/tls.cert"
+        keyFile = "/ssl/tls.key"
+        
+    [api]
+        dashboard = true
+        
+    [log]
+        level = "DEBUG"
+        format = "json"
+        
+    [metrics.prometheus]
+        buckets = [0.1,0.3,1.2,5.0]
+        entryPoint = "metrics"

@@ -1,0 +1,35 @@
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: traefik-dashboard-http
+  namespace: kube-system
+spec:
+  entryPoints:
+  - http
+  routes:
+  - kind: Rule
+    match: Host(`dev.brainest.ml`)
+    services:
+    - name: traefik
+      port: 8080
+    middlewares:
+    - name: traefik-auth
+      priority: 1
+    - name: https-redirect
+      priority: 10
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: traefik-dashboard-https
+spec:
+  entryPoints:
+  - https
+  routes:
+  - kind: Rule
+    match: Host(`dev.brainest.ml`)
+    services:
+    - name: traefik
+      port: 8080
+tls: {}

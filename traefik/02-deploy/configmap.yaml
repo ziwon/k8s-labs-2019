@@ -5,35 +5,66 @@ metadata:
   name: traefik
   namespace: kube-system
 data:
-  dynamic_conf.toml: |
+  traefik.toml: |
+    [global]
+      checkNewVersion = true
+      sendAnonymousUsage = false
+
+    [entryPoints]
+      [entryPoints.http]
+        address = ":80"
+
+      [entryPoints.https]
+        address = ":443"
+
+      [entryPoints.traefik]
+        address = ":8080"
+
+    [api]
+      insecure = true
+      debug = true
+
+    [providers]
+      [providers.kubernetesIngress]
+
+
     [http]
       [http.routers]
-        [http.routers.router0]
-          rule = "HostRegexp(`{host:.+}`)"
-          entrypoint = ["http"]
-          service = "admin"
-          middlewares = ["adminAuth","redirect"]
-          priority = 1
+        [http.routers.http]
+          rule = "Host(`dev.brainest.ml`)"
+          entrypoints = ["http"]
+          service = "dashboard"
+          middlewares = ["redirect","adminAuth"]
+          [http.routers.http.tls]
 
-        [http.routers.router1]
-          rule = "HostRegexp(`{host:.+}`)"
-          entrypoint = ["https"]
-          service = "admin"
-          middlewares = ["adminAuth"]
-          priority = 1
-          [http.routers.router1.tls]
+      [http.middlewares]
+        [http.middlewares.redirect.redirectScheme]
+          scheme = "https"
 
-        [http.middlewares]
-          [http.middlewares.redirect.redirectScheme]
-            scheme = "https"
+        [http.middlewares.adminAuth.basicAuth]
+          # echo $(htpasswd -nb user password) | sed -e s/\\$/\\$\\$/g
+          users = [
+            "admin:$$apr1$$oLh2Faj8$$/iDVbVbJiNH.r0IqkP0KC."
+          ]
 
-          [http.middlewares.adminAuth.basicAuth]
-            # echo $(htpasswd -nb user password) | sed -e s/\\$/\\$\\$/g
-            users = [
-              "admin:$$apr1$$oLh2Faj8$$/iDVbVbJiNH.r0IqkP0KC."
-            ]
+      [http.services]
+        [http.services.dashboard.loadBalancer]
+          [[http.services.dashboard.loadBalancer.servers]]
+            url = "http://localhost:8080"
 
-        [http.services]
-          [http.services.admin.loadBalancer]
-            [[http.services.admin.loadBalancer.servers]]
-            url = "http://traefik/"
+    [[tls.certificates]]
+      certFile = "/ssl/tls.crt"
+      keyFile = "/ssl/tls.key"
+
+    [tls.stores]
+      [tls.stores.default]
+        [tls.stores.default.defaultCertificate]
+          certFile = "/ssl/tls.crt"
+          keyFile  = "/ssl/tls.key"
+
+    [log]
+      level = "DEBUG"
+
+    [metrics.prometheus]
+      buckets = [0.1,0.3,1.2,5.0]
+      entryPoint = "metrics"
