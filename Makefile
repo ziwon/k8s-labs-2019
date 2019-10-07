@@ -2,6 +2,7 @@ THIS_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 THIS_DIR := $(dir $(THIS_PATH))
 
 KLAB = ./klab.sh
+KEVENTS = kubectl get events
 
 define HELM_PATCH
 	kubectl create serviceaccount --namespace kube-system tiller
@@ -66,9 +67,26 @@ install-elasticsearch:
       --set cluster.env.RECOVER_AFTER_MASTER_NODES=$${MIN_REPLICAS} \
       --set cluster.env.EXPECTED_MASTER_NODES=$${MIN_REPLICAS};
 
-.PHONY: watch-events
-watch-events: ## Watch events sorting by last seen time
-	@watch kubectl get events --sort-by='.lastTimestamp'
+.PHONY: events
+events-desc: ## events sorting by last seen time
+	@$(KEVENTS) --sort-by='.metadata.creationTimestamp'  -o 'go-template={{range .items}}{{.firstTimestamp}}{{"\t"}}{{.involvedObject.name}}{{"\t"}}{{.involvedObject.kind}}{{"\t"}}{{.message}}{{"\t"}}{{.reason}}{{"\t"}}{{.type}}{{"\t"}}{{"\n"}}{{end}}'
+
+ifeq (events-type,$(firstword $(MAKECMDGOALS)))
+  RUN_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+  $(eval $(RUN_ARGS):;@:)
+endif
+events-type: ## events warning only
+	@$(KEVENTS) --field-selector type=$(RUN_ARGS)
+
+events-no-pod:
+	@$(KEVENTS) --field-selector involvedObject.kind!=Pod
+
+ifeq (events-any,$(firstword $(MAKECMDGOALS)))
+  RUN_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+  $(eval $(RUN_ARGS):;@:)
+endif
+events-any:
+	@$(KEVENTS) --field-selector involvedObject.name=$(RUN_ARGS) --all-namespaces
 
 .PHONY: run-test-pod
 run-test-pod:
