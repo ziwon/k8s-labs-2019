@@ -29,8 +29,6 @@ delete-pod:
 .PHONY: helm-init helm-patch
 helm-init:
 	@helm init
-
-helm-patch:
 	$(subst $(CRLF), && ,$(HELM_PATCH))
 
 helm-repo:
@@ -115,6 +113,5 @@ up:
 .PHONY: down
 down:
 	@$(KLAB) down
-down:
 
 .DEFAULT_GOAL := help
