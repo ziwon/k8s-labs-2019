@@ -75,6 +75,9 @@ case $1 in
   down)
     down
     ;;
+  init)
+    init
+    ;;
 
   *)
     echo "Unknown: $1"; exit 1;

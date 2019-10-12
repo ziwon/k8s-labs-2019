@@ -106,6 +106,10 @@ logs: # Show logs
 	kail -lapp=$(POD_NAME) -n $(NAMESPACE)
 
 
+.PHONY: init
+init:
+	$(KLAB) init
+
 .PHONY: up
 up:
 	@$(KLAB) up
