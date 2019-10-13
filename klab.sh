@@ -2,12 +2,17 @@
 
 set -e -uo pipefail
 
-CURRENT_DIR="$(cd "$(dirname "${0}")" && pwd -P)"
-
 source .envrc
 
+create() {
+  echo ">> Creating cluster..."
 
-init() {
+  count=$(k3d list | grep "${CLUSTER_NAME} | wc -l")
+  if [ "$count" -eq 1 ]; then
+    echo">> Your cluster is already created."
+    exit 1
+  fi
+
   k3d create \
     --name "$CLUSTER_NAME" \
     --image "$K3S_IMAGE" \
@@ -42,44 +47,61 @@ init() {
   rm -rf metrics-server
 
   echo ">> Your k3s cluster ready"
+  echo ">>"
+  echo ">> Please, expose your KUBECONFIG variable to the current environment"
+  echo ">> export KUBECONFIG=\"\$(k3d get-kubeconfig --name=\"\${CLUSTER_NAME}\")"
 
   exit 0
 }
 
+delete() {
+  echo ">> Deleting cluster..."
+  k3d delete --name "${CLUSTER_NAME}"
+}
+
 up() {
-  k3d start --name ${CLUSTER_NAME}
+  echo ">> Starting cluster..."
+  k3d start --name "${CLUSTER_NAME}"
 }
 
 down() {
-  k3d stop --name ${CLUSTER_NAME}
+  echo ">> Shutdown cluster..."
+  k3d stop --name "${CLUSTER_NAME}"
 }
 
 boot_docker() {
-  set -e
-  docker system info > /dev/null 2>&1;
+  echo ">> Checking docker is running..."
+  set +e
+  $(docker system info > /dev/null 2>&1)
   if [ $? -ne 0 ]; then
     open --background -a Docker && echo -n "Docker is starting..";
     while ! docker system info > /dev/null 2>&1; do echo -e ".\c"; sleep 1; done;
     echo -e "done.\n"
   fi
-  set +e
+  set -e
 }
 
 case $1 in
   up)
     boot_docker
-    up
-    hash direnv &> /dev/null && direnv allow || echo "Please, install direnv."
+    count=$(k3d list | grep "${CLUSTER_NAME} | wc -l")
+    if [ "$count" -eq 0 ]; then
+      echo">> Your cluster is not created."
+      create
+    fi
+    command -v direnv &> /dev/null && direnv allow || echo ">> Please, install direnv."
     ;;
 
   down)
     down
     ;;
-  init)
-    init
+  create)
+    create
     ;;
-
+  delete)
+    delete
+    ;;
   *)
-    echo "Unknown: $1"; exit 1;
+    echo ">> Unknown: $1"; exit 1;
     ;;
 esac

@@ -1,13 +1,14 @@
 THIS_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 THIS_DIR := $(dir $(THIS_PATH))
 
+K = kubectl
 KLAB = ./klab.sh
-KEVENTS = kubectl get events
+KEVENTS = $(K) get events
 
 define HELM_PATCH
-	kubectl create serviceaccount --namespace kube-system tiller
-	kubectl create clusterrolebinding tiller-cluster-rule --clusterrole=cluster-admin --serviceaccount=kube-system:tiller
-	kubectl patch deploy --namespace kube-system tiller-deploy -p '{"spec":{"template":{"spec":{"serviceAccount":"tiller"}}}}'
+	$(K) create serviceaccount --namespace kube-system tiller
+	$(K) create clusterrolebinding tiller-cluster-rule --clusterrole=cluster-admin --serviceaccount=kube-system:tiller
+	$(K) patch deploy --namespace kube-system tiller-deploy -p '{"spec":{"template":{"spec":{"serviceAccount":"tiller"}}}}'
 	helm init --service-account tiller --upgrade
 endef
 
@@ -22,9 +23,15 @@ help: ## Show this help (default target)
 	/^[a-zA-Z0-9_-]+:.*?##/ { printf "  \033[1;33m%-30s\033[0m %s\n", $$1, $$2 } \
 	/^@##.*?/ { printf "\n\033[1m%s\033[0m\n", $$1 }' $(MAKEFILE_LIST)
 
+tools:
+	@curl -s https://raw.githubusercontent.com/rancher/k3d/master/install.sh | bash
+	@brew install kubectx
+	@brew install stern
+	@brew install derailed/k9s/k9s
+
 .PHONY:
 delete-pod:
-	@kubectl -lapp=(TAG)
+	@$(K) -lapp=(TAG)
 
 .PHONY: helm-init helm-patch
 helm-init:
@@ -36,15 +43,15 @@ helm-repo:
 
 .PHONY: install-cert-manager
 install-cert-manager: ## Install cert-manager
-	@kubectl --kubeconfig="${KUBECONFIG}" apply -f "https://raw.githubusercontent.com/jetstack/cert-manager/release-0.9/deploy/manifests/00-crds.yaml"
-	@kubectl --kubeconfig="${KUBECONFIG}" apply -f "addons/cert-manager.yaml"
-	@kubectl --kubeconfig="${KUBECONFIG}" apply -f "issuers/cluster-issuer-prod.yaml"
+	@$(K) --kubeconfig="${KUBECONFIG}" apply -f "https://raw.githubusercontent.com/jetstack/cert-manager/release-0.9/deploy/manifests/00-crds.yaml"
+	@$(K) --kubeconfig="${KUBECONFIG}" apply -f "addons/cert-manager.yaml"
+	@$(K) --kubeconfig="${KUBECONFIG}" apply -f "issuers/cluster-issuer-prod.yaml"
 
 .PHONY: install-traefik
 install-traefik: ## Install traefik
-	@kubectl apply -f traefik/00-crds
-	@kubectl apply -f traefik/01-accounts
-	@kubectl apply -f traefik/02-deploy
+	@$(K) apply -f traefik/00-crds
+	@$(K) apply -f traefik/01-accounts
+	@$(K) apply -f traefik/02-deploy
 
 .PHONY: install-elasticsearch
 install-elasticsearch:
@@ -88,34 +95,24 @@ events-any:
 
 .PHONY: run-test-pod
 run-test-pod:
-	@kubectl run test --generator=run-pod/v1  --image=tutum/curl -- sleep 10000
+	@$(K) run test --generator=run-pod/v1  --image=tutum/curl -- sleep 10000
 
 .PHONY: clean-all
 clean-all:
 	docker system prune --all --force
 	@sleep 10 # wait for a little to be removed all of the huge files
 
-.PHONY: logs
-ifeq (logs,$(firstword $(MAKECMDGOALS)))
-  RUN_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
-  $(eval $(RUN_ARGS):;@:)
-endif
-logs: # Show logs
-	@$(eval POD_NAME := $(shell [[ "$(RUN_ARGS)" = "${str%[[:space:]]*}" ]] && cut -d ' ' -f1 || echo "$(RUN_ARGS)" ))
-	@$(eval NAMESPACE := $(shell {  [[ "$(RUN_ARGS)" = "${str%[[:space:]]*}" ]] && cut -d ' ' -f2 } || kubectl config view --minify --output 'jsonpath={..namespace}'))
-	kail -lapp=$(POD_NAME) -n $(NAMESPACE)
+.PHONY: create create up down
+create:
+	@$(KLAB) $@
 
+delete:
+	@$(KLAB) $@
 
-.PHONY: init
-init:
-	$(KLAB) init
-
-.PHONY: up
 up:
-	@$(KLAB) up
+	@$(KLAB) $@
 
-.PHONY: down
 down:
-	@$(KLAB) down
+	@$(KLAB) $@
 
 .DEFAULT_GOAL := help
