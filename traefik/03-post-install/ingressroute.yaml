@@ -14,8 +14,8 @@ spec:
     - name: traefik
       port: 8080
     middlewares:
-    - name: traefik-auth
-      priority: 1
+    #- name: traefik-auth
+      #priority: 1
     - name: https-redirect
       priority: 10
 ---

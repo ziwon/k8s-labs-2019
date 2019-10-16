@@ -8,63 +8,40 @@ data:
   traefik.toml: |
     [global]
       checkNewVersion = true
-      sendAnonymousUsage = false
+      sendAnonymousUsage = true
+
+    [serversTransport]
+      insecureSkipVerify = true
+      maxIdleConnsPerHost = 0
 
     [entryPoints]
       [entryPoints.http]
         address = ":80"
-
       [entryPoints.https]
         address = ":443"
-
       [entryPoints.traefik]
         address = ":8080"
 
     [api]
+      dashboard = true
       insecure = true
-      debug = true
 
     [providers]
-      [providers.kubernetesIngress]
+      #providersThrottleDuration = "2s"
+      #[providers.kubernetesIngress]
+        #throttleDuration = "0s"
 
+      [providers.kubernetesCRD]
+        ingressClass = "traefik-private"
 
-    [http]
-      [http.routers]
-        [http.routers.http]
-          rule = "Host(`dev.brainest.ml`)"
-          entrypoints = ["http"]
-          service = "dashboard"
-          middlewares = ["redirect","adminAuth"]
-          [http.routers.http.tls]
+    [metrics]
+      [metrics.prometheus]
+        buckets = [0.1,0.3,1.2,5.0]
+        entryPoint = "metrics"
 
-      [http.middlewares]
-        [http.middlewares.redirect.redirectScheme]
-          scheme = "https"
-
-        [http.middlewares.adminAuth.basicAuth]
-          # echo $(htpasswd -nb user password) | sed -e s/\\$/\\$\\$/g
-          users = [
-            "admin:$$apr1$$oLh2Faj8$$/iDVbVbJiNH.r0IqkP0KC."
-          ]
-
-      [http.services]
-        [http.services.dashboard.loadBalancer]
-          [[http.services.dashboard.loadBalancer.servers]]
-            url = "http://localhost:8080"
-
-    [[tls.certificates]]
-      certFile = "/ssl/tls.crt"
-      keyFile = "/ssl/tls.key"
-
-    [tls.stores]
-      [tls.stores.default]
-        [tls.stores.default.defaultCertificate]
-          certFile = "/ssl/tls.crt"
-          keyFile  = "/ssl/tls.key"
+    [ping]
+      entryPoint = "http"
 
     [log]
       level = "DEBUG"
-
-    [metrics.prometheus]
-      buckets = [0.1,0.3,1.2,5.0]
-      entryPoint = "metrics"
+---

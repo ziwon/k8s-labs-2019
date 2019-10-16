@@ -7,12 +7,6 @@ source .envrc
 create() {
   echo ">> Creating cluster..."
 
-  count=$(k3d list | grep "${CLUSTER_NAME} | wc -l")
-  if [ "$count" -eq 1 ]; then
-    echo">> Your cluster is already created."
-    exit 1
-  fi
-
   k3d create \
     --name "$CLUSTER_NAME" \
     --image "$K3S_IMAGE" \
@@ -84,14 +78,10 @@ boot_docker() {
 case $1 in
   up)
     boot_docker
-    count=$(k3d list | grep "${CLUSTER_NAME} | wc -l")
-    if [ "$count" -eq 0 ]; then
-      echo">> Your cluster is not created."
-      create
-    fi
-    command -v direnv &> /dev/null && direnv allow || echo ">> Please, install direnv."
+    set +e
+    cnt=$(k3d list > /dev/null 2>&1 | grep -c "${CLUSTER_NAME}")
+    [ "$cnt" -eq 0 ] && create; up || up
     ;;
-
   down)
     down
     ;;
