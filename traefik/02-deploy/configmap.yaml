@@ -11,8 +11,7 @@ data:
       sendAnonymousUsage = true
 
     [serversTransport]
-      insecureSkipVerify = true
-      maxIdleConnsPerHost = 0
+      insecureSkipVerify = false
 
     [entryPoints]
       [entryPoints.http]
@@ -23,16 +22,14 @@ data:
         address = ":8080"
 
     [api]
+      debug = true
       dashboard = true
-      insecure = true
+      #insecure = true
 
     [providers]
-      #providersThrottleDuration = "2s"
-      #[providers.kubernetesIngress]
-        #throttleDuration = "0s"
-
+    #[providers.kubernetesIngress]
       [providers.kubernetesCRD]
-        ingressClass = "traefik-private"
+        namespaces = [ "kube-system" ]
 
     [metrics]
       [metrics.prometheus]
@@ -43,5 +40,15 @@ data:
       entryPoint = "http"
 
     [log]
-      level = "DEBUG"
+      level = "Debug"
+
+    [certificatesResolvers]
+      [certificatesResolvers.letsencrypt]
+        [certificatesResolvers.letsencrypt.acme]
+          email = "admin@brainest.ml"
+          storage = "acme.json"
+          # Uncomment to use Let's Encrypt's staging server, leave commented for prod
+          caServer = "https://acme-staging-v02.api.letsencrypt.org/directory"
+          [certificatesResolvers.letsencrypt.acme.httpChallenge]
+            entryPoint = "http"
 ---

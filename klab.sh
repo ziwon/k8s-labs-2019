@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e -uo pipefail
+set -euo pipefail
 
 source .envrc
 
@@ -63,11 +63,11 @@ down() {
   k3d stop --name "${CLUSTER_NAME}"
 }
 
-boot_docker() {
-  echo ">> Checking docker is running..."
+launch_docker() {
+  echo ">> Docker is running..?"
   set +e
-  $(docker system info > /dev/null 2>&1)
-  if [ $? -ne 0 ]; then
+  (docker system info > /dev/null 2>&1)
+  if [ "$?" -ne 0 ]; then
     open --background -a Docker && echo -n "Docker is starting..";
     while ! docker system info > /dev/null 2>&1; do echo -e ".\c"; sleep 1; done;
     echo -e "done.\n"
@@ -77,10 +77,10 @@ boot_docker() {
 
 case $1 in
   up)
-    boot_docker
-    set +e
-    cnt=$(k3d list > /dev/null 2>&1 | grep -c "${CLUSTER_NAME}")
-    [ "$cnt" -eq 0 ] && create; up || up
+    launch_docker
+    cnt=$(k3d list 2>/dev/null | grep -c "${CLUSTER_NAME}")
+    [ "$cnt" -eq 0 ] && create;
+    up
     ;;
   down)
     down

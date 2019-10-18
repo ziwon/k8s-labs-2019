@@ -5,34 +5,28 @@
     [entryPoints.https]
         address = ":443"
 
-    [entryPoints.traefik]
-        address = ":8080"
-
     [http]
         [http.routers]
-            [http.routers.dashboard]
-                entrypoints = ["https"]
-                rule = "Host(`dev.brainest.ml`)"
-                service = "dashboard"
-                middlewares = ["redirect", "adminAuth"]
-                [http.routers.dashboard.tls]
+            [http.routers.https]
+                entrypoints = ["http"]
+                middlewares = ["redirect"]
+                rule = "HostRegexp(`{host:.+}`)"
+                service = "api@internal"
 
-            [http.middlewares]
-                [http.middlewares.redirect.redirectScheme]
-                    scheme = "https"
+        [http.middlewares]
+            [http.middlewares.redirect.redirectScheme]
+                scheme = "https"
+                permanent = true
 
-            [http.middlewares.adminAuth.basicAuth]
-                # echo $(htpasswd -nb user password) | sed -e s/\\$/\\$\\$/g
-                users = [
-                    "admin:$$apr1$$oLh2Faj8$$/iDVbVbJiNH.r0IqkP0KC."
-                ]
-
-    [[tls.certificates]]
-        certFile = "/ssl/tls.cert"
-        keyFile = "/ssl/tls.key"
+        [http.middlewares.adminAuth.basicAuth]
+            # echo $(htpasswd -nb user password) | sed -e s/\\$/\\$\\$/g
+            users = [
+                "admin:$$apr1$$oLh2Faj8$$/iDVbVbJiNH.r0IqkP0KC."
+            ]
 
     [api]
         dashboard = true
+        insecure = false
 
     [log]
         level = "DEBUG"
