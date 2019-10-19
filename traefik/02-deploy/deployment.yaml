@@ -57,6 +57,8 @@ spec:
         volumeMounts:
         - mountPath: /config
           name: config
+        - mountPath: /dynamic
+          name: dynamic-conf
         - mountPath: /ssl
           name: ssl
       volumes:
@@ -64,6 +66,10 @@ spec:
         configMap:
           defaultMode: 0666
           name: traefik
+      - name: dynamic-conf
+        configMap:
+          defaultMode: 0666
+          name: traefik-dynamic
       - name: ssl
         secret:
           defaultMode: 0420

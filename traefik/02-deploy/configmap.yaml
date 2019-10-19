@@ -24,12 +24,13 @@ data:
     [api]
       debug = true
       dashboard = true
-      #insecure = true
+      insecure = false
 
     [providers]
-    #[providers.kubernetesIngress]
+    #[providers.kubernetesIngress] - disable after setup letsencrypt
       [providers.kubernetesCRD]
-        namespaces = [ "kube-system" ]
+      [providers.file]
+        filename = "/dynamic/dynamic_conf.toml"
 
     [metrics]
       [metrics.prometheus]
@@ -40,15 +41,45 @@ data:
       entryPoint = "http"
 
     [log]
-      level = "Debug"
+      level = "Info"
 
-    [certificatesResolvers]
-      [certificatesResolvers.letsencrypt]
-        [certificatesResolvers.letsencrypt.acme]
-          email = "admin@brainest.ml"
-          storage = "acme.json"
-          # Uncomment to use Let's Encrypt's staging server, leave commented for prod
-          caServer = "https://acme-staging-v02.api.letsencrypt.org/directory"
-          [certificatesResolvers.letsencrypt.acme.httpChallenge]
-            entryPoint = "http"
+    [accessLog]
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: traefik-dynamic
+  namespace: kube-system
+data:
+  dynamic_conf.toml: |
+    [http]
+      [http.routers]
+        [http.routers.traefik]
+          entrypoint = ["traefik"]
+          rule = "Host(`dev.brainest.ml`)"
+          middlewares = ["redirect"]
+          service = "api@internal"
+
+        [http.routers.https]
+          entrypoint = ["https"]
+          rule = "Host(`dev.brainest.ml`)"
+          middlewares = ["adminAuth"]
+          service = "api@internal"
+          [http.routers.https.tls]
+
+      [http.middlewares]
+        [http.middlewares.redirect.redirectScheme]
+          scheme = "https"
+        [http.middlewares.adminAuth.basicAuth]
+          users = ["admin:$apr1$M/jRzC2h$rYNFFONyKPHb5oMGB5t2u1"]
+
+    [tls]
+      [tls.options]
+        [tls.options.default]
+          minVersion = "VersionTLS12"
+          sniStrict = true
+
+      [[tls.certificates]]
+        certFile = "/ssl/tls.crt"
+        keyFile = "/ssl/tls.key"
+        stores = ["default"]

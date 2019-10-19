@@ -64,7 +64,7 @@ down() {
 }
 
 launch_docker() {
-  echo ">> Docker is running..?"
+  echo ">> Docker is running?.."
   set +e
   (docker system info > /dev/null 2>&1)
   if [ "$?" -ne 0 ]; then

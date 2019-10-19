@@ -14,7 +14,7 @@ spec:
     - name: https-redirect
     services:
     - name: traefik
-      port: 8080
+      port: 443
 ---
 apiVersion: traefik.containo.us/v1alpha1
 kind: IngressRoute
@@ -23,7 +23,7 @@ metadata:
   namespace: kube-system
 spec:
   entryPoints:
-  - https
+  - traefik
   routes:
   - kind: Rule
     match: Host(`dev.brainest.ml`)
@@ -31,8 +31,5 @@ spec:
     - name: traefik
       port: 8080
   tls:
-    certResolver: "letsencrypt"
-    domains:
-      - main: dev.brainest.ml
-        sans:
-        - "*.dev.brainest.ml"
+    certResolver: default
+
