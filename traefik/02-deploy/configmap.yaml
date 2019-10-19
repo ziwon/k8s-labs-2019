@@ -20,6 +20,8 @@ data:
         address = ":443"
       [entryPoints.traefik]
         address = ":8080"
+      [entryPoints.metrics]
+        address = ":8082"
 
     [api]
       debug = true
@@ -60,10 +62,22 @@ data:
           middlewares = ["redirect"]
           service = "api@internal"
 
+        [http.routers.metrics]
+          entrypoint = ["https"]
+          rule = "Host(`dev.brainest.ml`) && Path(`/metrics`)"
+          service = "metrics"
+          [http.routers.metrics.tls]
+
+        [http.routers.grafana]
+          entrypoint = ["https"]
+          rule = "Host(`dev.brainest.ml`) && PathPrefix(`/grafana`)"
+          service = "grafana"
+          middlewares = ["prefix-grafana"]
+          [http.routers.grafana.tls]
+
         [http.routers.https]
           entrypoint = ["https"]
           rule = "Host(`dev.brainest.ml`)"
-          middlewares = ["adminAuth"]
           service = "api@internal"
           [http.routers.https.tls]
 
@@ -72,7 +86,17 @@ data:
           scheme = "https"
         [http.middlewares.adminAuth.basicAuth]
           users = ["admin:$apr1$M/jRzC2h$rYNFFONyKPHb5oMGB5t2u1"]
+        [http.middlewares.prefix-grafana.stripPrefix]
+          prefixes = ["/grafana"]
 
+      [http.services]
+        [http.services.metrics]
+          [[http.services.metrics.loadBalancer.servers]]
+            url = "http://localhost:8082"
+
+        [http.services.grafana]
+          [[http.services.grafana.loadBalancer.servers]]
+            url = "http://monitoring-grafana.kube-system.svc.cluster.local"
     [tls]
       [tls.options]
         [tls.options.default]

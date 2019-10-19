@@ -21,4 +21,8 @@ spec:
     port: 8080
     targetPort: 8080
     name: admin
+  - protocol: TCP
+    port: 8082
+    targetPort: 8082
+    name: metrics
   type: LoadBalancer

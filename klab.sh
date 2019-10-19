@@ -76,19 +76,19 @@ launch_docker() {
 }
 
 case $1 in
-  up)
+  *up)
     launch_docker
     cnt=$(k3d list 2>/dev/null | grep -c "${CLUSTER_NAME}")
     [ "$cnt" -eq 0 ] && create;
     up
     ;;
-  down)
+  *down)
     down
     ;;
-  create)
+  *create)
     create
     ;;
-  delete)
+  *delete)
     delete
     ;;
   *)
