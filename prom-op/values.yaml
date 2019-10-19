@@ -1,0 +1,41 @@
+# Prometheus Operator Configuration
+# https://github.com/helm/charts/blob/master/stable/prometheus-operator/values.yaml
+#
+
+coreDns:
+  enabled: false
+
+prometheus:
+  prometheusSpec:
+    # Retention will be 120d in production mode, 7d in local mode
+    retention: "7d"
+    #storageSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          # with ssd
+            # storageClassName: ssd
+          # with local-path
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              # At the time of writing this, Prometheus ingests about 1500
+              # samples/sec, which should result it ~17GB for the 120 days of
+              # retention.
+              # If higher ingestion throughput is observed, this should be
+              # adjusted linearly.
+              storage: 1Gi
+
+# Subcharts
+grafana:
+  # Load dashboards from configmaps with a given label across all namespaces.
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana
+  grafana.ini:
+    server:
+      domain: ${CLUSTER_DOMAIN}
+      root_url: https://${CLUSTER_DOMAIN}/grafana/
+
