@@ -7,7 +7,6 @@ metadata:
 spec:
   selector:
     app: traefik
-    #externalTrafficPolicy: Local
   ports:
   - protocol: TCP
     port: 80

@@ -7,7 +7,7 @@ metadata:
   labels:
     app: traefik
 spec:
-  replicas: 2
+  replicas: 3
   selector:
     matchLabels:
       app: traefik
@@ -16,6 +16,16 @@ spec:
       labels:
         app: traefik
     spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - traefik
+            topologyKey: "kubernetes.io/hostname"
       serviceAccountName: traefik-ingress-controller
       containers:
       - name: traefik
@@ -23,14 +33,6 @@ spec:
         imagePullPolicy: IfNotPresent
         args:
         - --configFile=/config/traefik.toml
-           #- --api
-           #- --accesslog
-           #- --entrypoints.web.Address=:80
-           #- --entrypoints.web.forwardedheaders.insecure=true
-           #- --providers.kubernetescrd
-           #- --ping
-           #- --accesslog=true
-           #- --log=true
         ports:
         - name: http
           containerPort: 80

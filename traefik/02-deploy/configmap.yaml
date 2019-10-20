@@ -29,7 +29,6 @@ data:
       insecure = false
 
     [providers]
-    #[providers.kubernetesIngress] - disable after setup letsencrypt
       [providers.kubernetesCRD]
       [providers.file]
         filename = "/dynamic/dynamic_conf.toml"
