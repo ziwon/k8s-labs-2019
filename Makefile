@@ -4,7 +4,7 @@ THIS_DIR:=$(dir $(THIS_PATH))
 K=kubectl
 H=helm
 KLAB=./klab.sh
-KEVENTS=$(K) get events
+KEVT=$(K) get events
 
 define HELM_PATCH
 	$(K) create serviceaccount --namespace kube-system tiller
@@ -67,7 +67,7 @@ get-prometheus: ## Install promethus operator from helm chart
 
 .PHONY: update-prometheus
 update-prometheus:
-	helm upgrade -f prom-op/values.yaml monitoring stable/prometheus-operator
+	@helm upgrade -f prom-op/values.yaml monitoring stable/prometheus-operator
 
 del-prometheus: del-prometheus-crd
 	@$(H) delete monitoring --purge
@@ -101,27 +101,27 @@ get-elasticsearch: helm-repo ## Install elasticsearch
 
 .PHONY: events-desc events-type events-any
 events-desc: ## Get events sorted by last seen time (ex. make events-desc)
-	@$(KEVENTS) --sort-by='.metadata.creationTimestamp'  -o 'go-template={{range .items}}{{.firstTimestamp}}{{"\t"}}{{.involvedObject.name}}{{"\t"}}{{.involvedObject.kind}}{{"\t"}}{{.message}}{{"\t"}}{{.reason}}{{"\t"}}{{.type}}{{"\t"}}{{"\n"}}{{end}}'
+	@$(KEVT) --sort-by='.metadata.creationTimestamp' -o 'go-template={{range .items}}{{.firstTimestamp}}{{"\t"}}{{.involvedObject.name}}{{"\t"}}{{.involvedObject.kind}}{{"\t"}}{{.message}}{{"\t"}}{{.reason}}{{"\t"}}{{.type}}{{"\t"}}{{"\n"}}{{end}}'
 
 ifeq (events-type,$(firstword $(MAKECMDGOALS)))
   RUN_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
   $(eval $(RUN_ARGS):;@:)
 endif
 events-type: ## Get events by type (ex. make events-type [Warning|Normal|...])
-	@$(KEVENTS) --field-selector type=$(RUN_ARGS)
+	@$(KEVT) --field-selector type=$(RUN_ARGS)
 
 ifeq (events-any,$(firstword $(MAKECMDGOALS)))
   RUN_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
   $(eval $(RUN_ARGS):;@:)
 endif
 events-any: ## Get events with given object name (ex. make events-any traefik)
-	@$(KEVENTS) --field-selector involvedObject.name=$(RUN_ARGS) --all-namespaces
+	@$(KEVT) --field-selector involvedObject.name=$(RUN_ARGS) --all-namespaces
 
 .PHONY: run-test-pod
 run-test-pod: ## Deploy a pod for testing
 	@$(K) run test --generator=run-pod/v1  --image=tutum/curl -- sleep 10000
 
-.PHONY: create delete up down
+.PHONY: k3s-create k3s-delete k3s-up k3s-down
 k3s-create: ## Create K3s Cluster
 	@$(KLAB) $@
 
@@ -136,7 +136,19 @@ k3s-down: ## Stop K3s cluster
 
 .PHONY: sys-clean-all
 sys-clean-all: ## Clean up all docker resources
-	docker system prune --all --force
-	@sleep 10 # wait for a little to be removed all of the huge files
+	@docker system prune --all --force
+
+.PHONY: host-add host-remove
+host-add:
+	@cat $(THIS_DIR).envrc | sh -
+	@grep -q "$(CLUSTER_DOMAIN)" /etc/hosts \
+		&& echo "Already added" \
+		|| (echo "$$(curl -s icanhazip.com)\t$(CLUSTER_DOMAIN)" | sudo tee -a /etc/hosts > /dev/null && cat /etc/hosts)
+
+host-remove:
+	@cat $(THIS_DIR).envrc | sh -
+	@grep -q "$(CLUSTER_DOMAIN)" /etc/hosts \
+		&& (sudo sed -i".bak" "/$(CLUSTER_DOMAIN)/d" /etc/hosts && cat /etc/hosts) \
+		|| echo "Not found"
 
 .DEFAULT_GOAL := help
