@@ -13,16 +13,6 @@ define HELM_PATCH
 	$(H) init --service-account tiller --upgrade
 endef
 
-.PHONY: help
-help: ## Show this help (default target)
-	@echo "Cloud Native CI/CD with Tekton (yngpil.yoon@gmail.com)\n"
-	@awk 'BEGIN { \
-		FS=":.*##"; \
-		printf "Usage:\n  make \033[33m<target>\033[0m\n" \
-	} \
-	/^[a-zA-Z0-9_-]+:.*?##/ { printf "  \033[1;33m%-30s\033[0m %s\n", $$1, $$2 } \
-	/^@##.*?/ { printf "\n\033[1m%s\033[0m\n", $$1 }' $(MAKEFILE_LIST)
-
 .PHONY: tools
 tools: ## Install tools to your local machine
 	@curl -s https://raw.githubusercontent.com/rancher/k3d/master/install.sh | bash
@@ -117,22 +107,31 @@ endif
 events-any: ## Get events with given object name (ex. make events-any traefik)
 	@$(KEVT) --field-selector involvedObject.name=$(RUN_ARGS) --all-namespaces
 
-.PHONY: run-test-pod
-run-test-pod: ## Deploy a pod for testing
-	@$(K) run test --generator=run-pod/v1  --image=tutum/curl -- sleep 10000
-
-.PHONY: k3s-create k3s-delete k3s-up k3s-down
-k3s-create: ## Create K3s Cluster
+.PHONY: k8s-create k8s-delete k8s-up k8s-down k8s-shell k8s-pod-shell
+k8s-create: ## Create K3s Cluster
 	@$(KLAB) $@
 
-k3s-delete: ## Delete K3s Cluster
+k8s-delete: ## Delete K3s Cluster
 	@$(KLAB) $@
 
-k3s-up: ## Start K3s cluster
+k8s-up: ## Start K3s cluster
 	@$(KLAB) $@
 
-k3s-down: ## Stop K3s cluster
+k8s-down: ## Stop K3s cluster
 	@$(KLAB) $@
+
+ifeq (k8s-node-shell,$(firstword $(MAKECMDGOALS)))
+  RUN_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+  $(eval $(RUN_ARGS):;@:)
+endif
+k8s-shell:
+	@./nsenter-node.sh  $(RUN_ARGS)
+
+k8s-pod-shell:
+	@$(K) run ${USER}-nsenter --restart=Never -ti --rm --image alexeiled/nsenter --overrides '{"spec":{"hostPID": true, "containers":[{"name":"1","image":"alpine","command":["nsenter","--mount=/proc/1/ns/mnt","--","/bin/sh"],"stdin": true,"tty":true,"securityContext":{"privileged":true}}]}}'
+
+docker-shell:
+	@docker run -it --rm --privileged --pid=host alexeiled/nsenter --all --target 1 -- su -
 
 .PHONY: sys-clean-all
 sys-clean-all: ## Clean up all docker resources
@@ -150,5 +149,15 @@ host-remove:
 	@grep -q "$(CLUSTER_DOMAIN)" /etc/hosts \
 		&& (sudo sed -i".bak" "/$(CLUSTER_DOMAIN)/d" /etc/hosts && cat /etc/hosts) \
 		|| echo "Not found"
+
+.PHONY: help
+help: ## Show this help (default target)
+	@echo "Personal Kubernetes Labs (yngpil.yoon@gmail.com)\n"
+	@awk 'BEGIN { \
+		FS=":.*##"; \
+		printf "Usage:\n  make \033[33m<target>\033[0m\n" \
+	} \
+	/^[a-zA-Z0-9_-]+:.*?##/ { printf "  \033[1;33m%-30s\033[0m %s\n", $$1, $$2 } \
+	/^@##.*?/ { printf "\n\033[1m%s\033[0m\n", $$1 }' $(MAKEFILE_LIST)
 
 .DEFAULT_GOAL := help
