@@ -3,11 +3,6 @@
 This will create 3 validators on your cluster with host network.  In production, you should configure persistent volume for each node.
 
 ```sh
-$ git clone git@github.com:ziwon/yak8s.git
-$ cd yak8s
-$ make kind-cluster-up
-$ export KUBECONFIG="$(kind get kubeconfig-path --name="1")"\n
-$ make kinc-cluster-info # regenerate kubecofig for kind cluster
 $ k create namespace blockchain
 $ k apply cosmos/validator.yaml -n blockchain
 $ k get pods -o wide -w
