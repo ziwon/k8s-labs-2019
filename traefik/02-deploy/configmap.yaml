@@ -16,10 +16,17 @@ data:
     [entryPoints]
       [entryPoints.http]
         address = ":80"
+        [entryPoints.http.forwardedHeaders]
+          trustedIPs = ["127.0.0.0/24", "10.42.0.0/16", "172.20.0.0/16", "59.12.195.87/32"]
+
       [entryPoints.https]
         address = ":443"
+        [entryPoints.https.forwardedHeaders]
+          trustedIPs = ["127.0.0.0/24", "10.42.0.0/16", "172.20.0.0/16", "59.12.195.87/32"]
+
       [entryPoints.traefik]
         address = ":8080"
+
       [entryPoints.metrics]
         address = ":8082"
 
@@ -45,6 +52,8 @@ data:
       level = "Info"
 
     [accessLog]
+      [accessLog.fields]
+        defaultMode = "keep"
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -58,44 +67,83 @@ data:
         [http.routers.traefik]
           entrypoint = ["traefik"]
           rule = "Host(`dev.brainest.ml`)"
-          middlewares = ["redirect"]
+          middlewares = ["secured"]
           service = "api@internal"
-
-        [http.routers.metrics]
-          entrypoint = ["https"]
-          rule = "Host(`dev.brainest.ml`) && Path(`/metrics`)"
-          service = "metrics"
-          [http.routers.metrics.tls]
-
-        [http.routers.grafana]
-          entrypoint = ["https"]
-          rule = "Host(`dev.brainest.ml`) && PathPrefix(`/grafana`)"
-          service = "grafana"
-          middlewares = ["prefix-grafana"]
-          [http.routers.grafana.tls]
 
         [http.routers.https]
           entrypoint = ["https"]
           rule = "Host(`dev.brainest.ml`)"
           service = "api@internal"
+          middlewares = ["secured"]
           [http.routers.https.tls]
 
+        #[http.routers.metrics]
+          #entrypoint = ["https"]
+          #rule = "Host(`dev.brainest.ml`) && Path(`/metrics`)"
+          #service = "metrics"
+          #middlewares = ["redirect", "known-ips"]
+          #[http.routers.metrics.tls]
+
+        [http.routers.grafana]
+          entrypoint = ["https"]
+          rule = "Host(`dev.brainest.ml`) && PathPrefix(`/grafana`)"
+          service = "grafana"
+          ###########################################################
+          # Since ipwhitelist is not working properly,
+          # We are going to use basicAuth in Grafana
+          # Please update its password manually after deploying it with helm:
+          #
+          # $ kubectl edit secret monitoring-grafana
+          #
+          middlewares = ["redirect", "known-ips", "prefix-grafana"]
+          [http.routers.grafana.tls]
+
+        [http.routers.alert]
+          entrypoint = ["https"]
+          rule = "Host(`dev.brainest.ml`) && PathPrefix(`/alertmanager`)"
+          service = "alert"
+          middlewares = ["secured", "prefix-alert"]
+          [http.routers.alert.tls]
+
+
       [http.middlewares]
+        [http.middlewares.secured.chain]
+          middlewares = ["redirect", "known-ips", "adminAuth"]
+
         [http.middlewares.redirect.redirectScheme]
           scheme = "https"
+
         [http.middlewares.adminAuth.basicAuth]
-          users = ["admin:$apr1$M/jRzC2h$rYNFFONyKPHb5oMGB5t2u1"]
+          users = ["admin:$apr1$LfLN1FFq$wtEVm44GEwbYK7MMEGneX0"]
+
         [http.middlewares.prefix-grafana.stripPrefix]
           prefixes = ["/grafana"]
 
-      [http.services]
-        [http.services.metrics]
-          [[http.services.metrics.loadBalancer.servers]]
-            url = "http://localhost:8082"
+        [http.middlewares.prefix-alert.stripPrefix]
+          prefixes = ["/alertmanager"]
+
+      [http.middlewares.known-ips.ipWhiteList]
+        ###########################################################
+        # TODO: ipWhiteList is NOT working properly
+        #
+        ###########################################################
+        sourceRange = ["127.0.0.1/24", "10.42.0.0/16", "172.20.0.0/16", "59.12.195.87/32"]
+        #[http.middlewares.known-ips.ipWhiteList.ipStrategy] # looks NOT working in k3d
+          #depth = 2
+
+      #[http.services]
+        #[http.services.metrics]
+          #[[http.services.metrics.loadBalancer.servers]]
+            #url = "http://localhost:8082"
 
         [http.services.grafana]
           [[http.services.grafana.loadBalancer.servers]]
             url = "http://monitoring-grafana.kube-system.svc.cluster.local"
+
+        [http.services.alert]
+          [[http.services.alert.loadBalancer.servers]]
+            url = "http://monitoring-prometheus-oper-alertmanager.kube-system.svc.cluster.local:9093"
+
     [tls]
       [tls.options]
         [tls.options.default]

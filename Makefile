@@ -57,7 +57,7 @@ get-prometheus: ## Install promethus operator from helm chart
 
 .PHONY: update-prometheus
 update-prometheus:
-	@helm upgrade -f prom-op/values.yaml monitoring stable/prometheus-operator
+	@cat ./prom-op/values.yaml | sed -e 's|$${CLUSTER_DOMAIN}|$(CLUSTER_DOMAIN)|' | $(H) upgrade --debug monitoring --namespace kube-system stable/prometheus-operator -f -
 
 del-prometheus: del-prometheus-crd
 	@$(H) delete monitoring --purge
@@ -107,7 +107,7 @@ endif
 events-any: ## Get events with given object name (ex. make events-any traefik)
 	@$(KEVT) --field-selector involvedObject.name=$(RUN_ARGS) --all-namespaces
 
-.PHONY: k8s-create k8s-delete k8s-up k8s-down k8s-shell k8s-pod-shell
+.PHONY: k8s-create k8s-delete k8s-up k8s-down k8s-node-shell k8s-pod-shell
 k8s-create: ## Create K3s Cluster
 	@$(KLAB) $@
 
@@ -120,17 +120,17 @@ k8s-up: ## Start K3s cluster
 k8s-down: ## Stop K3s cluster
 	@$(KLAB) $@
 
-ifeq (k8s-node-shell,$(firstword $(MAKECMDGOALS)))
+ifeq (shell-node,$(firstword $(MAKECMDGOALS)))
   RUN_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
   $(eval $(RUN_ARGS):;@:)
 endif
-k8s-shell:
+shell-node: ## Get node shell into the given node
 	@./nsenter-node.sh  $(RUN_ARGS)
 
-k8s-pod-shell:
+shell-pod: ## Get testing pod shell from k8s current context
 	@$(K) run ${USER}-nsenter --restart=Never -ti --rm --image alexeiled/nsenter --overrides '{"spec":{"hostPID": true, "containers":[{"name":"1","image":"alpine","command":["nsenter","--mount=/proc/1/ns/mnt","--","/bin/sh"],"stdin": true,"tty":true,"securityContext":{"privileged":true}}]}}'
 
-docker-shell:
+shell-docker: ## Get docker shell
 	@docker run -it --rm --privileged --pid=host alexeiled/nsenter --all --target 1 -- su -
 
 .PHONY: sys-clean-all
@@ -138,13 +138,13 @@ sys-clean-all: ## Clean up all docker resources
 	@docker system prune --all --force
 
 .PHONY: host-add host-remove
-host-add:
+host-add: ## Add `$CLUSTER_DOMAIN` host to /etc/hosts
 	@cat $(THIS_DIR).envrc | sh -
 	@grep -q "$(CLUSTER_DOMAIN)" /etc/hosts \
 		&& echo "Already added" \
 		|| (echo "$$(curl -s icanhazip.com)\t$(CLUSTER_DOMAIN)" | sudo tee -a /etc/hosts > /dev/null && cat /etc/hosts)
 
-host-remove:
+host-remove: ## Remove `$CLUSTER_DOMAIN` host from /etc/hosts
 	@cat $(THIS_DIR).envrc | sh -
 	@grep -q "$(CLUSTER_DOMAIN)" /etc/hosts \
 		&& (sudo sed -i".bak" "/$(CLUSTER_DOMAIN)/d" /etc/hosts && cat /etc/hosts) \
