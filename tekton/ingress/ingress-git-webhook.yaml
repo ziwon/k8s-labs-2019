@@ -1,0 +1,20 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: tekton-dashboard
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    certmanager.k8s.io/clusterissuer: "letsencrypt-staging"
+spec:
+  tls:
+  - hosts:
+    - git-webhook-{% UID %}.{% INGRESS_IP }.nip.io
+    secretName: letsencrypt-staging
+  rules:
+  - host: git-webhook-{% UID %}.{% INGRESS_IP }.nip.io
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: git-webhook-{% UID %}
+          servicePort: {% GIT_WEBHOOK_PORT %}

@@ -1,0 +1,13 @@
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: deploy-manager-docker-bot
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: docker-bot
+  namespace: tekton-pipelines
+roleRef:
+  kind: Role
+  name: deploy-manager
+  apiGroup: rbac.authorization.k8s.io

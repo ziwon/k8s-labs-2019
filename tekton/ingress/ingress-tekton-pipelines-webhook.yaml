@@ -1,0 +1,20 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: tekton-pipelines-webhook
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+    certmanager.k8s.io/clusterissuer: "letsencrypt-staging"
+spec:
+  tls:
+  - hosts:
+    - tekton-pipelines-webhook.{% HOST_IP %}.nip.io
+    secretName: letsencrypt-staging
+  rules:
+  - host: tekton-pipelines-webhook.{% HOST_IP %}.nip.io
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: tekton-pipelines-webhook
+          servicePort: 9097

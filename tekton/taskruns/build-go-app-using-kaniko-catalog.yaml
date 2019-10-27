@@ -1,0 +1,29 @@
+apiVersion: tekton.dev/v1alpha1
+kind: TaskRun
+metadata:
+  name: build-kaniko-build-app
+spec:
+  serviceAccount: docker-bot
+  taskRef:
+    name: kaniko
+  inputs:
+    resources:
+    - name: source
+      resourceSpec:
+        type: git
+        params:
+        - name: url
+          value: https://github.com/ziwon/go-app
+    params:
+    - name: DOCKERFILE
+      value: Dockerfile
+    - name: CONTEXT
+      value: .
+  outputs:
+    resources:
+    - name: image
+      resourceSpec:
+        type: image
+        params:
+        - name: url
+          value: docker.io/ziwon/go-app

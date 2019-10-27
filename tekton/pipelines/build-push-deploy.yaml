@@ -1,0 +1,44 @@
+apiVersion: tekton.dev/v1alpha1
+kind: Pipeline
+metadata:
+  name: pipeline-build-and-deploy
+spec:
+  resources:
+    - name: source
+      type: git
+    - name: image
+      type: image
+  tasks:
+    - name: build-and-push
+      taskRef:
+        name: build-docker-image-from-git-source
+      params:
+        - name: pathToDockerFile
+          value: Dockerfile
+        - name: pathToContext
+          value: /workspace/docker-source
+      resources:
+        inputs:
+          - name: docker-source
+            resource: source
+        outputs:
+          - name: builtImage
+            resource: image
+    - name: deploy-app
+      taskRef:
+        name: deploy-using-kubectl
+      resources:
+        inputs:
+          - name: source
+            resource: source
+          - name: image
+            resource: image
+            from:
+              - build-and-push
+      params:
+        - name: path
+          value: /workspace/source/k8s/deployment.yaml
+        - name: yqArg
+          value: "-d0"
+        - name: yamlPathToImage
+          value: "spec.template.spec.containers[0].image"

@@ -1,0 +1,19 @@
+apiVersion: certmanager.k8s.io/v1alpha1
+kind: Certificate
+metadata:
+  name: certificate-staging
+  namespace: tekton-pipelines
+spec:
+  secretName: letsencrypt-staging
+  issuerRef:
+    name: letsencrypt-staging
+    kind: ClusterIssuer
+  commonName: '*.{% HOST_IP %}.nip.io'
+  dnsNames:
+    - '*.{% HOST_IP %}.nip.io'
+  acme:
+    config:
+      - dns01:
+          provider: dns
+        domains:
+          - '*.{% HOST_IP %}.nip.io'

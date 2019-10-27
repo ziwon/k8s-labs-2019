@@ -1,0 +1,20 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: webhooks-extension-sink
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    certmanager.k8s.io/clusterissuer: "letsencrypt-staging"
+spec:
+  tls:
+  - hosts:
+    - webhooks-extension-sink.{% INGREST_IP %}.nip.io
+    secretName: letsencrypt-staging
+  rules:
+  - host: webhooks-extension-sink.{% INGRESS_IP %}.nip.io
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: webhooks-extension-sink
+          servicePort: 8080
