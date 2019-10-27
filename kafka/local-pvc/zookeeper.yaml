@@ -1,0 +1,188 @@
+---
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: zk-data-pv
+  labels:
+    type: local
+spec:
+  storageClassName: zk-data-local
+  capacity:
+    storage: 100Mi
+  accessModes:
+  - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Delete
+  local:
+    path: "/mnt/zk/data"
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: node-role.kubernetes.io/master
+          operator: NotIn
+          values:
+          - ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: zk-data-pvc
+spec:
+  storageClassName: zk-data-local
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
+---
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: zk-log-pv
+  labels:
+    type: local
+spec:
+  storageClassName: zk-log-local
+  capacity:
+    storage: 100Mi
+  accessModes:
+  - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Delete
+  local:
+    path: "/mnt/zk/log"
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: node-role.kubernetes.io/master
+          operator: NotIn
+          values:
+          - ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: zk-log-pvc
+spec:
+  storageClassName: zk-log-local
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zk-hl
+  labels:
+    app: zk
+spec:
+  ports:
+  - port: 2888
+    name: server
+  - port: 3888
+    name: leader-election
+  clusterIP: None
+  selector:
+    app: zk
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zk
+  labels:
+    app: zk
+spec:
+  ports:
+  - port: 2181
+    name: client
+  selector:
+    app: zk
+---
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: zk
+spec:
+  serviceName: zk-hl
+  podManagementPolicy: OrderedReady
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: zk
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5556"
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - zk
+              topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: zk-server
+        image: confluentinc/cp-zookeeper:5.0.1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 2181
+          name: client
+        - containerPort: 2888
+          name: server
+        - containerPort: 3888
+          name: leader-election
+        - containerPort: 5555
+          name: jmx
+        env:
+        - name: KAFKA_HEAP_OPTS
+          value: "-Xms512M -Xmx512M"
+        - name: KAFKA_JMX_PORT
+          value: "5555"
+        - name: ZOOKEEPER_TICK_TIME
+          value: "2000"
+        - name: ZOOKEEPER_SYNC_LIMIT
+          value: "5"
+        - name: ZOOKEEPER_INIT_LIMIT
+          value: "10"
+        - name: ZOOKEEPER_MAX_CLIENT_CNXNS
+          value: "60"
+        - name: ZOOKEEPER_AUTOPURGE_SNAP_RETAIN_COUNT
+          value: "3"
+        - name: ZOOKEEPER_AUTOPURGE_PURGE_INTERVAL
+          value: "24"
+        - name: ZOOKEEPER_CLIENT_PORT
+          value: "2181"
+        - name: ZOOKEEPER_SERVERS
+          value: "zk-0.zk-hl.default.svc.cluster.local:2888:3888;zk-1.zk-hl.default.svc.cluster.local:2888:3888;zk-2.zk-hl.default.svc.cluster.local:2888:3888"
+        # ZOOKEEPER_SERVER_ID is required just to pass zk ensure script for env check,
+        # the value(metadata.mame) is not used and will be overwritten in command part
+        - name: ZOOKEEPER_SERVER_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        command:
+        - "bash"
+        - "-c"
+        - "ZOOKEEPER_SERVER_ID=$((${HOSTNAME##*-}+1)) && /etc/confluent/docker/run"
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/zookeeper/data
+        - name: log
+          mountPath: /var/lib/zookeeper/log
+      # nodeSelector:
+      # kops.k8s.io/instancegroup: backend
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: zk-data-pvc
+      - name: log
+        persistentVolumeClaim:
+          claimName: zk-log-pvc

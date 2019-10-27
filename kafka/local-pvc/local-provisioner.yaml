@@ -1,0 +1,108 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: local-provisioner
+  namespace: default
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: local-provisioner
+  namespace: default
+rules:
+- apiGroups: [""]
+  resources: ["persistentvolumes"]
+  verbs: ["get", "list", "watch", "create", "delete"]
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["get", "list", "watch", "update"]
+- apiGroups: [""]
+  resources: ["storageclasses"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch"]
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: local-provisioner
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: local-provisioner
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: local-provisioner
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: local-pv-config
+  namespace: default
+data:
+  storageClassMap: |
+    kafka-data:
+       hostDir: /mnt/kafka
+       mountDir: /mnt/kafka
+    zk-data:
+       hostDir: /mnt/zk/data
+       mountDir: /mnt/zk/data
+    zk-log:
+       hostDir: /mnt/zk/log
+       mountDir: /mnt/zk/log
+---
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: local-volumer
+  namespace: default
+  labels:
+    app: local-volumer
+spec:
+  selector:
+    matchLabels:
+      app: local-volumer
+  template:
+    metadata:
+      labels:
+        app: local-volumer
+    spec:
+      serviceAccountName: local-provisioner
+      containers:
+      - name: provisioner
+        image: "quay.io/external_storage/local-volume-provisioner:v2.3.0"
+        imagePullPolicy: "Always"
+        env:
+        - name: MY_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: local-pv-config
+          mountPath: /etc/provisioner/config
+          readOnly: true
+        - name: kafka-data
+          mountPath: /mnt/kafka
+        - name: zk-data
+          mountPath: /mnt/zk/data
+        - name: zk-log
+          mountPath: /mnt/zk/log
+      volumes:
+      - name: local-pv-config
+        configMap:
+          name: local-pv-config
+      - name: kafka-data
+        hostPath:
+          path: /mnt/kafka
+      - name: zk-data
+        hostPath:
+          path: /mnt/zk/data
+      - name: zk-log
+        hostPath:
+          path: /mnt/zk/log
