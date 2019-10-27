@@ -1,0 +1,3 @@
+[submodule "tekton/go-app"]
+	path = tekton/go-app
+	url = git@github.com:ziwon/go-app.git

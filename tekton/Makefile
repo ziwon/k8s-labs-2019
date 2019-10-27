@@ -102,13 +102,12 @@ task-deploy-go-app: k8s-service-accounts tekton-dashboard ## Deploy go-app with 
 	@echo -e "\nPipeLine Runs List"
 	@tkn pipelineruns list
 	@sleep 2
-	@open http://tekton-dashboard.192.168.100.48.nip.io/#/namespaces/tekton-pipelines/pipelines/pipeline-go-app/runs/go-app &
 	@tkn pipelineruns logs -f go-app
 
 
 .PHONY: k8s-secrets k8s-service-accounts k8s-forward-svc
 k8s-secrets: ## Create a Secret manifest, which is used to store your Docker Hub credentials
-	source ./.secrets ;\
+	@source ./.secrets ;\
 	enc(){ echo $$1 | sed 's/=//g' | xargs echo -n | base64; } ;\
 	DOCKER_USERNAME=$$(enc $$DOCKER_USERNAME) ;\
 	DOCKER_PASSWORD=$$(enc $$DOCKER_PASSWORD) ;\
