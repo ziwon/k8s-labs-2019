@@ -1,0 +1,153 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongo-key
+type: Opaque
+data:
+  mongo-key: |
+    aWJoZmtzYU5WYUpMS3lUbFk5VkpTekEvSXBmNVRCRVpEUTVteG9JZlJnT2FjdFhkRGxNanRpeVpT
+    MWVqUG1acSBtRTg0RkFXTnNMbi9WS25KZnFlc0tUdFZyYXVTL0NmQ00wN2ZsMUQyWTV1dGY4UnlB
+    VVlKQk9BV3RPa1NFOUdJIGg4ZGhMRTVBZWhBRU9VcGV6YXZnZUtmQWpHMlA3cDBQT0xuOGNyek9q
+    QWhQbTI0WThtTWpRanAveG1EN1E3R2wgNHQzK2xjZ21kUUE3MGxhM2VOczVDU3hzRGhpUXlxcTIv
+    bGxoMEZFUTZFb2NjN3loK0FNZ0E0SnBwNUo1cjBEUSBVcVlmUWRLbW0rQkwwSHhzSDFkQ0ZqSkhD
+    amxvTTdmUFRvaG54OVRJYzNLb282K2NhTzhyVVRhU3IvNDZpVnA1IEtlRUFvQlRPMFBWaWhsWm85
+    TGxBM0UxViticFcwRHhUcytFdHduN21SWXFCZXlRbHZZbFNoYnR3RzdNUDl1TnUgVzRFUFV1b2pR
+    RWhpeGllbjJPd0hFOHFSTFRWcmtKU05DbllxeGRXWUgzRVlWK1lmcFp2amhDV1c1STk3S09CbiBD
+    N0RFY2JQcE44TG1DekJMVi9OdW9CcWRCRFl0QzZwY0MyRFFhMlBnSDYyT2JURG9MWXo1Uk9XL3FH
+    Z295WUI2IHMwdm12QU4yalhGOUVSc0Ruci9UMlZBWWR6QXc4ZW1MSmNJenJhUzkvOHROVCsvNE9W
+    MG5UMjJuZm1OaldsZ3ogMlZSejVwbUsvSUppTEsrOXltZS9rVVdoK3p3MHR2VkJnNFNjaGEvRnJD
+    eGRFV1lxdmh6Q2dPQmhQaE5ta1VMWiBYbU55SE1yajNFQ1NLb3FUSk95RCthUWRxTVpFR3NsMkNo
+    bGFKcEpKY2ZJPQ==
+---
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: mongo-storage
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongo-pv
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+  - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: mongo-storage
+  local:
+    path: /mnt
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: node-role.kubernetes.io/master
+          operator: NotIn
+          values:
+          - ""
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: mongo-pvc
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: mongo-storage
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo
+  labels:
+    app: mongo
+spec:
+  ports:
+  - port: 27017
+    targetPort: 27017
+  clusterIP: None
+  selector:
+    app: mongo
+---
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: mongo
+spec:
+  serviceName: "mongo"
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: mongo
+    spec:
+      terminationGracePeriodSeconds: 10
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - mongo
+            topologyKey: "kubernetes.io/hostname"
+      initContainers:
+      - name: disable
+        image: busybox
+        volumeMounts:
+        - name: host-sys
+          mountPath: /host-sys
+        command: ['sh', '-c', '[ -d /host-sys/kernel/mm/transparent_hugepage/ ] && echo never > /host-sys/kernel/mm/transparent_hugepage/enabled']
+      containers:
+      - name: mongo
+        image: mongo
+        ports:
+        - containerPort: 27017
+        command:
+        - "mongod"
+        - "--replSet"
+        - rs0
+        - "--auth"
+        - "--clusterAuthMode"
+        - keyFile
+        - "--keyFile"
+        - /etc/secrets/mongo-key
+        - "--setParameter"
+        - authenticationMechanisms=SCRAM-SHA-1
+        - "--bind_ip"
+        - 0.0.0.0
+        lifecycle:
+          postStart:
+            exec:
+              command:
+              - 'sh'
+              - '-c'
+              - >
+                sleep 10;
+                if [ "$HOSTNAME" = "mongo-2" ]; then
+                  mongo --eval 'rs.initiate({ _id: "rs0", protocolVersion: 1, members: [{ _id: 0, host: "mongo-0.mongo.default.svc.cluster.local:27017" }, { _id: 1, host: "mongo-1.mongo.default.svc.cluster.local:27017" }, { _id: 2, host: "mongo-2.mongo.default.svc.cluster.local:27017" }] });';
+                fi;
+          volumeMounts:
+          - name: mongo-persistent-storage
+            mountPath: /data/db
+          - name: mongo-key
+            mountPath: /etc/secrets
+            readOnly: true
+      volumes:
+      - name: mongo-key
+        secret:
+          defaultMode: 0400
+          secretName: mongo-key
+      - name: host-sys
+        hostPath:
+          path: /sys
+      - name: mongo-persistent-storage
+        persistentVolumeClaim:
+          claimName: mongo-pvc
