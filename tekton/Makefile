@@ -1,9 +1,9 @@
 SHELL := /bin/bash
 
-TEKTON_CLI_VERION := 0.3.1
-TEKTON_DASHBOARD_VERSION := 0.1.1
+TEKTON_CLI_VERION := 0.4.0
+TEKTON_DASHBOARD_VERSION := 0.2.0
 ISTIO_VERSION := 1.1.7
-KNATIVE_VERSION := 0.6.0
+KNATIVE_VERSION := 0.8.0
 
 DOCKER_SECRET_FILE = secrets/docker-secret.yaml
 GITHUB_SECRET_FILE = secrets/git-secret.yaml
@@ -19,26 +19,13 @@ help: ## Show the usage (default target)
 	/^@##.*?/ { printf "\n\033[1m%s\033[0m\n", $$1 }' $(MAKEFILE_LIST)
 
 
-.PHONY: get-k8s-tools
-get-k8s-tools: ## Install the Kubernetes tools (kubens, ytt, kbld, kapp, kwt, kail)
-	@command -v kubectx &>/dev/null && echo "kubectx installed" || brew install kubectx
-	@brew tap k14s/tap
-	@command -v ytt &>/dev/null && echo "ytt installed" || brew install ytt
-	@command -v kbld &>/dev/null && echo "kbld installed" || brew install kbld
-	@command -v kapp &>/dev/null && echo "kapp installed" || brew install kapp
-	@command -v kwt &>/dev/null && echo "kwt installed" || brew install kwt
-	@brew tap boz/repo
-	@command -v kail &>/dev/null && echo "kail installed" || brew install boz/repo/kail
-	@command -v octant &>/dev/null && echo "octant installed" || brew install octant
-
-
-.PHONY: tekton-install tekton-install-tkn
+PHONY: tekton-install tekton-install-tkn
 tekton-install: ## Install the latest Tekton and Tekton Dashboard into your cluster
 	@kubectl apply -f https://storage.googleapis.com/tekton-releases/latest/release.yaml
 	@kubectl apply -f https://github.com/tektoncd/dashboard/releases/download/v${TEKTON_DASHBOARD_VERSION}/release.yaml
 
 tekton-install-tkn: ## Install the `tkn` CLI into your OS X machine
-	@curl -LO https://github.com/tektoncd/cli/releases/download/v${TEKTON_CLI_VERION}/tkn_${TEKTON_CLI_VERION}_Darwin_x86_64.tar.gz
+	@curl -sLO https://github.com/tektoncd/cli/releases/download/v${TEKTON_CLI_VERION}/tkn_${TEKTON_CLI_VERION}_Darwin_x86_64.tar.gz
 	@sudo tar xvzf tkn_${TEKTON_CLI_VERION}_Darwin_x86_64.tar.gz -C /usr/local/bin/ tkn
 
 .PHONY: tekton-tasks tekton-runs tekton-dashboards
@@ -57,7 +44,8 @@ tekton-runs: ## Show all Tekton runs
 	@kubectl get pipelineruns -n tekton-pipelines
 
 tekton-dashboard: # Open Tekton dashboard by port-forwarding
-	kubectl port-forward -n tekton-pipelines service/tekton-dashboard 8080:9097 >> /dev/null &
+	@pkill kubectl 2>/dev/null || true
+	@kubectl port-forward -n tekton-pipelines service/tekton-dashboard 8080:9097 >> /dev/null &
 
 
 .PHONY: task-hello-world task-run-hello-world
@@ -72,6 +60,7 @@ task-run-hello-world: ## Execute a simple task that defined as 'echo-hello-world
 	@tkn taskrun list
 
 task-build-go-app: ## Create go-app resources to be defined for go-app, and execute build-push task
+	@kubectl delete taskruns.tekton.dev build-go-app-docker $^ 2>/dev/null; true;
 	@kubectl apply -f resources/git-go-app.yaml
 	@kubectl apply -f resources/img-go-app.yaml
 	@kubectl apply -f tasks/build-docker-image-from-git-source.yaml
@@ -119,12 +108,11 @@ task-deploy-go-app: k8s-service-accounts tekton-dashboard ## Deploy go-app with 
 
 .PHONY: k8s-secrets k8s-service-accounts k8s-forward-svc
 k8s-secrets: ## Create a Secret manifest, which is used to store your Docker Hub credentials
-	@source .env ;\
+	source ./.secrets ;\
 	enc(){ echo $$1 | sed 's/=//g' | xargs echo -n | base64; } ;\
 	DOCKER_USERNAME=$$(enc $$DOCKER_USERNAME) ;\
 	DOCKER_PASSWORD=$$(enc $$DOCKER_PASSWORD) ;\
 	GITHUB_ACCESS_TOKEN=$$(enc $$GITHUB_ACCESS_TOKEN) ;\
-	GITHUB_WEBHOOK_SECRET=$$(enc $$GITHUB_WEBHOOK_SECRET) ;\
 	kubens tekton-pipelines ;\
 	cat $(DOCKER_SECRET_FILE) | sed -e 's|{% DOCKER_USERNAME %}|'$$DOCKER_USERNAME'|;s|{% DOCKER_PASSWORD %}|'$$DOCKER_PASSWORD'|' | kubectl apply -f - $^ 2>/dev/null; true ;\
 	cat $(GITHUB_SECRET_FILE) | sed -e 's|{% GITHUB_ACCESS_TOKEN %}|'$$GITHUB_ACCESS_TOKEN'|;s|{% GITHUB_WEBHOOK_SECRET %}|'$$GITHUB_WEBHOOK_SECRET'|' | kubectl apply -f - $^ 2>/dev/null; true ;\
@@ -145,15 +133,6 @@ k8s-service-accounts: k8s-secrets
 	@sleep 2
 	@echo -e "\nService Accounts"
 	@kubectl get serviceaccounts
-
-
-k8s-issuers:
-	@$(eval HOST_IP:=$(shell ifconfig | grep netmask | sed -n 2p | cut -d ' ' -f2))
-	@cat ./ingress/issuer-prod.yaml | sed -e 's|{% HOST_IP %}|$(HOST_IP)|' | kubectl apply -f -
-	@cat ./ingress/issuer-staging.yaml | sed -e 's|{% HOST_IP %}|$(HOST_IP)|' | kubectl apply -f -
-	@sleep 5
-	@kubectl describe clusterissuers
-
 
 k8s-ingress:
 	@$(eval HOST_IP:=$(shell ifconfig | grep netmask | sed -n 2p | cut -d ' ' -f2))
