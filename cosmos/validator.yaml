@@ -1,0 +1,352 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+  name: gaia
+  labels:
+    app: gaia
+spec:
+  ports:
+  - name: p2p
+    port: 26656
+    protocol: TCP
+    targetPort: 26656
+  - name: rpc
+    port: 26657
+    protocol: TCP
+    targetPort: 26657
+  - name: prometheus
+    port: 26660
+    protocol: TCP
+    targetPort: 26660
+  selector:
+    app: gaia
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gaia-config
+data:
+  chain_id: "gaia-1"
+  validators: "3"
+  passphrase: "1234567890"
+  faucet_coins: "100000000stake,1000000000000000000ziwon"
+  validator_coins: "1000000000stake"
+---
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: gaia-budget
+spec:
+  selector:
+    matchLabels:
+      app: gaia
+  minAvailable: 2
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: gaia
+spec:
+  serviceName: gaia
+  selector:
+    matchLabels:
+      app: gaia
+  replicas: 3
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+        app: gaia
+    spec:
+      hostNetwork: true
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - gaia
+              topologyKey: kubernetes.io/hostname
+      dnsPolicy: ClusterFirstWithHostNet
+      securityContext:
+        runAsUser: 0
+      terminationGracePeriodSeconds: 0
+      initContainers:
+      - name: init
+        image: ziwon/gaiadnode:0.34.7
+        imagePullPolicy: Always
+        workingDir: /root/.gaiad
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 100m
+            memory: 256Mi
+        command:
+        - sh
+        - -c
+        - |
+
+          set -ex
+
+          GAIA_HOME=/root/.gaiad
+
+          if [ ! -f "$GAIA_HOME/config/genesis.json" ]; then
+            # Initialize a node
+            gaiad init --chain-id=$CHAIN_ID $NODE_NAME
+            echo $PASSPHARASE | gaiacli keys add $NODE_NAME >& $GAIA_HOME/config/.mnemonic
+
+            gaiad add-genesis-account $(gaiacli keys show $NODE_NAME -a) $VALIDATOR_COINS
+            echo $PASSPHARASE | gaiad gentx --name $NODE_NAME --amount $VALIDATOR_COINS --ip $POD_IP
+
+            # Prepare for gentx.json with gathering validator
+            mkdir -p $GAIA_HOME/config/www
+            gentx_file=$(ls $GAIA_HOME/config/gentx)
+            cp $GAIA_HOME/config/gentx/$gentx_file $GAIA_HOME/config/www/gentx.json
+          fi
+
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: PASSPHARASE
+          valueFrom:
+            configMapKeyRef:
+              name: gaia-config
+              key: passphrase
+        - name: CHAIN_ID
+          valueFrom:
+            configMapKeyRef:
+              name: gaia-config
+              key: chain_id
+        - name: VALIDATOR_COINS
+          valueFrom:
+            configMapKeyRef:
+              name: gaia-config
+              key: validator_coins
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        volumeMounts:
+        - name: nodedir
+          mountPath: /root/.gaiad
+        - name: clidir
+          mountPath: /root/.gaiacli
+      containers:
+      - name: gaiad
+        image: ziwon/gaiadnode:0.34.7
+        imagePullPolicy: Always
+        workingDir: /root/.gaiad
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 2048Mi
+        command:
+        - sh
+        - -c
+        - |
+          set -ex
+
+          GAIA_HOME=/root/.gaiad
+
+          ID=${NODE_NAME##*-}
+          length=$(expr $VALIDATORS - 1)
+          GV=$length
+          fqdn_suffix=gaia.blockchain.svc.cluster.local
+
+          if [ -f "$GAIA_HOME/.initialized" ]; then
+            gaiad start
+          fi
+
+          # Geterhing gentx from others
+          if [ "$ID" == "$GV" ]; then
+
+            set +e
+            for i in `seq 0 $length`; do
+              if [ "$ID" -ne "$i" ]; then
+
+                # Skip collecting if exists when restarting a validator
+                if [ -f "$GAIA_HOME/config/gentx/gentx-$i.json" ]; then
+                  continue
+                fi
+
+                GENTX_JSON_URL="http://gaia-$i.$fqdn_suffix/gentx.json"
+                curl -s --fail "${GENTX_JSON_URL}" > /dev/null
+                ERR=$?
+                while [ "$ERR" != 0 ]; do
+                  sleep 5
+                  curl -s --fail "${GENTX_JSON_URL}" > /dev/null
+                  ERR=$?
+                done
+
+                sleep 5
+                (cd $GAIA_HOME/config/gentx && curl -o gentx-$i.json "${GENTX_JSON_URL}" && ls -al $GAIA_HOME/config/gentx)
+              fi
+            done
+            set -e
+
+            # Extract delegator_address
+            gentx_list=$(find $GAIA_HOME/config/gentx -mindepth 1 -maxdepth 1 -type f -regex "$GAIA_HOME/config/gentx/gentx-[0-9].json" | awk -F ./ '{print $NF}')
+            for json in $gentx_list; do
+              addr=$(cat $GAIA_HOME/config/gentx/$json | jq ".value.msg[0].value.delegator_address" | sed 's/"//g')
+              gaiad add-genesis-account $addr $VALIDATOR_COINS
+            done
+
+            # Generate faucet account
+            echo $PASSPHARASE | gaiacli keys add faucet >& $GAIA_HOME/config/.f_mnemonic
+
+            gaiad add-genesis-account faucet $FAUCET_COINS
+            cat $GAIA_HOME/config/genesis.json
+
+            # Collect gentxs
+            gaiad collect-gentxs
+
+            # Prepare for sharing genesis.json with others
+            mkdir -p $GAIA_HOME/config/www
+            cp $GAIA_HOME/config/genesis.json $GAIA_HOME/config/www
+          fi
+
+          # Then the gathering validator shares its genesis.json with other valiators
+          if [ "$ID" != "$GV" ]; then
+            set +e
+            echo "Connecting to gaia-$GV..."
+
+            GENESIS_JSON_URL="http://gaia-$GV.$fqdn_suffix/genesis.json"
+            curl -s --fail "${GENESIS_JSON_URL}" > /dev/null
+            ERR=$?
+            while [ "$ERR" != 0 ]; do
+              sleep 5
+              curl -s --fail "${GENESIS_JSON_URL}" > /dev/null
+              ERR=$?
+            done
+
+            sleep 5
+            (cd $GAIA_HOME/config && rm -rf genesis.json && curl -O "${GENESIS_JSON_URL}")
+            set -e
+          fi
+
+          # Build persistent_peers from gentxs's memo
+          addrs=$(cat $GAIA_HOME/config/genesis.json | jq '.app_state.gentxs[].value.memo' | grep  -v -- "$POD_IP" | sed 's/"//g')
+          peers=""
+          n=$(expr $length - 1)
+          for i in `seq 0 $n`; do
+            j=$(echo "$i" + 1 | bc)
+            addr=`echo $addrs | cut -d ' ' -f $j`
+            if [ "$i" -lt "$n" ]; then
+              peers="$peers$addr,"
+            else
+              peers="$peers$addr"
+            fi
+          done
+
+          # Update persistent_peers in config.toml
+          sed -i -e "s/persistent_peers \= ".*"/persistent_peers \= \"$peers\"/g" $GAIA_HOME/config/config.toml
+
+          # Some bug fixes
+          sed -i "s/addr_book_strict = true/addr_book_strict = false/g" $GAIA_HOME/config/config.toml
+
+          # Enable metrics
+          sed -i "s/prometheus = false/prometheus = true/g" $GAIA_HOME/config/config.toml
+          sed -i -e "s/namespace = \"tendermint\"/namespace = \"blockchain\"/g" $GAIA_HOME/config/config.toml
+
+          touch $GAIA_HOME/.initialized
+
+          # Start gaia
+          gaiad start
+        ports:
+        - containerPort: 26656
+          name: p2p
+        - containerPort: 26657
+          name: rpc
+        - containerPort: 26660
+          name: prometheus
+        env:
+        - name: PASSPHARASE
+          valueFrom:
+            configMapKeyRef:
+              name: gaia-config
+              key: passphrase
+        - name: VALIDATORS
+          valueFrom:
+            configMapKeyRef:
+              name: gaia-config
+              key: validators
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: FAUCET_COINS
+          valueFrom:
+            configMapKeyRef:
+              name: gaia-config
+              key: faucet_coins
+        - name: VALIDATOR_COINS
+          valueFrom:
+            configMapKeyRef:
+              name: gaia-config
+              key: validator_coins
+        volumeMounts:
+        - name: nodedir
+          mountPath: /root/.gaiad
+        - name: clidir
+          mountPath: /root/.gaiacli
+      - name: www
+        image: frolvlad/alpine-python3:latest
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            cpu: 10m
+            memory: 12Mi
+          limits:
+            cpu: 20m
+            memory: 24Mi
+        ports:
+        - containerPort: 80
+        command:
+        - sh
+        - -c
+        - |
+          GAIA_HOME=/root/.gaiad
+          cd $GAIA_HOME/config/www
+          python -m http.server --bind 0.0.0.0 80
+        volumeMounts:
+        - name: nodedir
+          mountPath: /root/.gaiad
+        - name: clidir
+          mountPath: /root/.gaiacli
+      volumes:
+      - name: configdir
+        configMap:
+          name: gaia-config
+      - name: nodedir
+        emptyDir: {}
+      - name: clidir
+        emptyDir: {}
+  #volumeClaimTemplates:
+  #- metadata:
+      #name: nodedir
+      #annotations:
+        #volume.beta.kubernetes.io/storage-class: gp2
+    #spec:
+      #accessModes:
+      #- ReadWriteOnce
+      #resources:
+        #requests:
+          #storage: 8Gi
