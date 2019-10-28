@@ -5,6 +5,7 @@
 Integration with WebHook is in progress!!
 
 ```sh
+$ make
 Cloud Native CI/CD with Tekton (yngpil.yoon@gmail.com)
 
 Usage:

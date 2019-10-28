@@ -108,16 +108,16 @@ events-any: ## Get events with given object name (ex. make events-any traefik)
 	@$(KEVT) --field-selector involvedObject.name=$(RUN_ARGS) --all-namespaces
 
 .PHONY: k8s-create k8s-delete k8s-up k8s-down k8s-node-shell k8s-pod-shell
-k8s-create: ## Create K3s Cluster
+k8s-create: ## Create Kubernetes cluster
 	@$(KLAB) $@
 
-k8s-delete: ## Delete K3s Cluster
+k8s-delete: ## Delete Kubernetes cluster
 	@$(KLAB) $@
 
-k8s-up: ## Start K3s cluster
+k8s-up: ## Start Kubernetes cluster
 	@$(KLAB) $@
 
-k8s-down: ## Stop K3s cluster
+k8s-down: ## Stop Kubernetes cluster
 	@$(KLAB) $@
 
 ifeq (shell-node,$(firstword $(MAKECMDGOALS)))

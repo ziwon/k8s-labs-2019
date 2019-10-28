@@ -1,6 +1,7 @@
 # k8s-labs
 
 ```sh
+$ make
 Personal Kubernetes Labs (yngpil.yoon@gmail.com)
 
 Usage:
@@ -16,10 +17,10 @@ Usage:
   events-desc                     Get events sorted by last seen time (ex. make events-desc)
   events-type                     Get events by type (ex. make events-type [Warning|Normal|...])
   events-any                      Get events with given object name (ex. make events-any traefik)
-  k8s-create                      Create K3s Cluster
-  k8s-delete                      Delete K3s Cluster
-  k8s-up                          Start K3s cluster
-  k8s-down                        Stop K3s cluster
+  k8s-create                      Create Kubernetes cluster
+  k8s-delete                      Delete Kubernetes cluster
+  k8s-up                          Start Kubernetes cluster
+  k8s-down                        Stop Kubernetes cluster
   shell-node                      Get node shell into the given node
   shell-pod                       Get testing pod shell from k8s current context
   shell-docker                    Get docker shell
